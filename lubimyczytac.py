@@ -142,17 +142,24 @@ async def downloadCovers(books: list[LubimyCzytacBook], coversDir: Path):
     await tqdm.gather(*[_downloadCover(book) for book in books])
 
 
-async def downloadLubimyCzytac(outputDirectory: Path, profileId: int):
+def readLubimyCzytac(outputDirectory: Path) -> list[LubimyCzytacBook]:
     outputJson = outputDirectory / "lubimyczytac.json"
-    previousResult: list[LubimyCzytacBook] = []
+    result: list[LubimyCzytacBook] = []
     if outputJson.exists():
         with outputJson.open("rb") as f:
-            previousResult = [
-                LubimyCzytacBook(**book) for book in orjson.loads(f.read())
-            ]
+            result = [LubimyCzytacBook(**book) for book in orjson.loads(f.read())]
+    return result
+
+
+async def downloadLubimyCzytac(
+    outputDirectory: Path, profileId: int
+) -> list[LubimyCzytacBook]:
+    outputJson = outputDirectory / "lubimyczytac.json"
+    previousResult = readLubimyCzytac(outputDirectory)
     booksFetched = await getBooks(profileId, previousResult)
     outputJson.write_bytes(orjson.dumps(booksFetched, option=orjson.OPT_INDENT_2))
     await downloadCovers(booksFetched, outputDirectory / "covers")
+    return booksFetched
 
 
 async def main():

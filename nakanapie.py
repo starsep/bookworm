@@ -88,12 +88,20 @@ async def getBooks(
     return books
 
 
-async def downloadNaKanapie(outputDirectory: Path, username: str):
+def readNaKanapie(outputDirectory: Path) -> list[NaKanapieBook]:
     outputJson = outputDirectory / "nakanapie.json"
-    previousResult: list[NaKanapieBook] = []
+    result: list[NaKanapieBook] = []
     if outputJson.exists():
         with outputJson.open("rb") as f:
-            previousResult = [NaKanapieBook(**book) for book in orjson.loads(f.read())]
+            result = [NaKanapieBook(**book) for book in orjson.loads(f.read())]
+    return result
+
+
+async def downloadNaKanapie(
+    outputDirectory: Path, username: str
+) -> list[NaKanapieBook]:
+    outputJson = outputDirectory / "nakanapie.json"
+    previousResult = readNaKanapie(outputDirectory)
     books = await getBooks(username, previousResult)
 
     async def _addMissingIsbn(book: NaKanapieBook):
@@ -102,6 +110,7 @@ async def downloadNaKanapie(outputDirectory: Path, username: str):
     await tqdm.gather(*[_addMissingIsbn(book) for book in books if book.isbn is None])
 
     outputJson.write_bytes(orjson.dumps(books, option=orjson.OPT_INDENT_2))
+    return books
 
 
 async def main():
