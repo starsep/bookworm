@@ -168,7 +168,7 @@ async def main():
     )
     args = parser.parse_args()
     outputDirectory: Path = args.output
-    outputJson = outputDirectory / "lc.json"
+    outputJson = outputDirectory / "lubimyczytac.json"
     previousResult: list[Book] = []
     if outputJson.exists():
         with outputJson.open("rb") as f:

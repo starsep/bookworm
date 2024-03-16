@@ -1,1 +1,1 @@
-lc.py: Downloads books and covers from lubimyczytac.pl
+lubimyczytac.py: Downloads books and covers from lubimyczytac.pl
