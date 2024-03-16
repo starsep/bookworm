@@ -70,6 +70,12 @@ async def getBooks(username: str) -> list[NaKanapieBook]:
     return books
 
 
+async def downloadNaKanapie(outputDirectory: Path, username: str):
+    outputJson = outputDirectory / "nakanapie.json"
+    books = await getBooks(username)
+    await outputJson.write_bytes(orjson.dumps(books, option=orjson.OPT_INDENT_2))
+
+
 async def main():
     parser = argparse.ArgumentParser(
         description="Program downloads books from nakanapie.pl"
@@ -83,10 +89,7 @@ async def main():
         default=Path("."),
     )
     args = parser.parse_args()
-    outputDirectory: Path = args.output
-    outputJson = outputDirectory / "nakanapie.json"
-    books = await getBooks(args.username)
-    await outputJson.write_bytes(orjson.dumps(books, option=orjson.OPT_INDENT_2))
+    await downloadNaKanapie(outputDirectory=args.output, username=args.username)
 
 
 if __name__ == "__main__":
