@@ -20,7 +20,7 @@ httpxClient = AsyncClient(limits=Limits(max_connections=10))
 
 
 @dataclass
-class Book:
+class LubimyCzytacBook:
     coverUrl: str
     url: str
     title: str
@@ -37,8 +37,8 @@ class Book:
 
 
 @dataclass
-class BooksPageResponse:
-    books: list[Book]
+class LubimyCzytacBooksPageResponse:
+    books: list[LubimyCzytacBook]
     count: int
     left: int
 
@@ -47,8 +47,8 @@ def normalizeIsbn(isbn: str) -> str:
     return isbn.replace("-", "").replace(" ", "").strip()
 
 
-async def getBookIsbn(book: Book) -> Optional[str]:
-    response = await httpxClient.get(book.url)
+async def getBookIsbn(url: str) -> Optional[str]:
+    response = await httpxClient.get(url)
     if response.status_code == 404:
         return None
     response.raise_for_status()
@@ -64,7 +64,7 @@ async def getBookIsbn(book: Book) -> Optional[str]:
 
 async def getBooksPage(
     page: int, profileId: int, bookIdToIsbn: dict[str, str]
-) -> Optional[BooksPageResponse]:
+) -> Optional[LubimyCzytacBooksPageResponse]:
     response = await httpxClient.post(
         "https://lubimyczytac.pl/profile/getLibraryBooksList",
         headers={
@@ -98,7 +98,7 @@ async def getBooksPage(
         cycleLink = row.find("a", {"href": bookCycleUrlPattern})
         shelvesLinks = row.find_all("a", {"href": shelvesUrlPattern})
         lcDomain = "https://lubimyczytac.pl"
-        book = Book(
+        book = LubimyCzytacBook(
             coverUrl=cover[0]["data-src"],
             url=lcDomain + bookLink["href"]
             if lcDomain not in bookLink["href"]
@@ -114,14 +114,16 @@ async def getBooksPage(
         if book.bookId in bookIdToIsbn:
             book.isbn = bookIdToIsbn[book.bookId]
         books.append(book)
-    return BooksPageResponse(
+    return LubimyCzytacBooksPageResponse(
         books=books,
         count=int(data["count"]),
         left=int(data["left"]),
     )
 
 
-async def getBooks(profileId: int, previousResult: list[Book]) -> list[Book]:
+async def getBooks(
+    profileId: int, previousResult: list[LubimyCzytacBook]
+) -> list[LubimyCzytacBook]:
     bookIdToIsbn = {
         book.bookId: normalizeIsbn(book.isbn)
         for book in previousResult
@@ -138,17 +140,17 @@ async def getBooks(profileId: int, previousResult: list[Book]) -> list[Book]:
         if pageBooks.left <= 0:
             break
 
-    async def _addMissingIsbn(book: Book):
-        book.isbn = await getBookIsbn(book)
+    async def _addMissingIsbn(book: LubimyCzytacBook):
+        book.isbn = await getBookIsbn(book.url)
 
     await tqdm.gather(*[_addMissingIsbn(book) for book in books if book.isbn is None])
     return books
 
 
-async def downloadCovers(books: list[Book], coversDir: Path):
+async def downloadCovers(books: list[LubimyCzytacBook], coversDir: Path):
     coversDir.mkdir(exist_ok=True)
 
-    async def _downloadCover(book: Book):
+    async def _downloadCover(book: LubimyCzytacBook):
         coverPath = coversDir / f"{book.bookId}.jpg"
         if coverPath.exists():
             return
@@ -175,10 +177,12 @@ async def main():
     args = parser.parse_args()
     outputDirectory: Path = args.output
     outputJson = outputDirectory / "lubimyczytac.json"
-    previousResult: list[Book] = []
+    previousResult: list[LubimyCzytacBook] = []
     if outputJson.exists():
         with outputJson.open("rb") as f:
-            previousResult = [Book(**book) for book in orjson.loads(f.read())]
+            previousResult = [
+                LubimyCzytacBook(**book) for book in orjson.loads(f.read())
+            ]
     booksFetched = await getBooks(args.profileId, previousResult)
     outputJson.write_bytes(orjson.dumps(booksFetched, option=orjson.OPT_INDENT_2))
     await downloadCovers(booksFetched, outputDirectory / "covers")
