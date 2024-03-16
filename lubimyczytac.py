@@ -157,7 +157,7 @@ async def downloadLubimyCzytac(outputDirectory: Path, profileId: int):
 
 async def main():
     parser = argparse.ArgumentParser(
-        description="Program downloads books and their covers from lubimyczytac.pl"
+        description="Program downloads books info and their covers from lubimyczytac.pl"
     )
     parser.add_argument("profileId", type=int, help="Profile id of user")
     parser.add_argument(

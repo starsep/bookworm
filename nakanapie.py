@@ -106,7 +106,7 @@ async def downloadNaKanapie(outputDirectory: Path, username: str):
 
 async def main():
     parser = argparse.ArgumentParser(
-        description="Program downloads books from nakanapie.pl"
+        description="Program downloads books info from nakanapie.pl"
     )
     parser.add_argument("username", type=str, help="Username from NaKanapie")
     parser.add_argument(
