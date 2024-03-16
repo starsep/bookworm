@@ -4,19 +4,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from httpx import AsyncClient, Limits
 import orjson
 from bs4 import BeautifulSoup
 import re
 
 from tqdm.asyncio import tqdm, trange
+from common import httpxClient, normalizeIsbn, getBookIsbn
 
 bookUrlPattern = re.compile(r"/ksiazka/(\d+)")
 authorUrlPattern = re.compile(r"/autor/(\d+)")
 bookCycleUrlPattern = re.compile(r"/cykl/(\d+)")
 shelvesUrlPattern = re.compile(r"/biblioteczka/lista\?shelfs=(\d+)")
 
-httpxClient = AsyncClient(limits=Limits(max_connections=10))
+lubimyCzytacDomain = "https://lubimyczytac.pl"
 
 
 @dataclass
@@ -41,25 +41,6 @@ class LubimyCzytacBooksPageResponse:
     books: list[LubimyCzytacBook]
     count: int
     left: int
-
-
-def normalizeIsbn(isbn: str) -> str:
-    return isbn.replace("-", "").replace(" ", "").strip()
-
-
-async def getBookIsbn(url: str) -> Optional[str]:
-    response = await httpxClient.get(url)
-    if response.status_code == 404:
-        return None
-    response.raise_for_status()
-    soup = BeautifulSoup(response.text, "html.parser")
-    isbnTag = soup.find("meta", {"property": "books:isbn"})
-    if isbnTag is not None:
-        isbn = isbnTag["content"]
-        if isbn in ["000-00-0000-00-0"]:
-            return None
-        return normalizeIsbn(isbn)
-    return None
 
 
 async def getBooksPage(
@@ -97,11 +78,10 @@ async def getBooksPage(
         authorLink = row.find("a", {"href": authorUrlPattern})
         cycleLink = row.find("a", {"href": bookCycleUrlPattern})
         shelvesLinks = row.find_all("a", {"href": shelvesUrlPattern})
-        lcDomain = "https://lubimyczytac.pl"
         book = LubimyCzytacBook(
             coverUrl=cover[0]["data-src"],
-            url=lcDomain + bookLink["href"]
-            if lcDomain not in bookLink["href"]
+            url=lubimyCzytacDomain + bookLink["href"]
+            if lubimyCzytacDomain not in bookLink["href"]
             else bookLink["href"],
             title=bookLink.text.strip(),
             author=authorLink.text.strip(),
