@@ -1,19 +1,22 @@
 import argparse
+import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-import httpx
+from httpx import AsyncClient, Limits
 import orjson
 from bs4 import BeautifulSoup
 import re
 
-from tqdm import tqdm
+from tqdm.asyncio import tqdm, trange
 
 bookUrlPattern = re.compile(r"/ksiazka/(\d+)")
 authorUrlPattern = re.compile(r"/autor/(\d+)")
 bookCycleUrlPattern = re.compile(r"/cykl/(\d+)")
 shelvesUrlPattern = re.compile(r"/biblioteczka/lista\?shelfs=(\d+)")
+
+httpxClient = AsyncClient(limits=Limits(max_connections=10))
 
 
 @dataclass
@@ -40,8 +43,8 @@ class BooksPageResponse:
     left: int
 
 
-def getBookIsbn(book: Book) -> Optional[str]:
-    response = httpx.get(book.url)
+async def getBookIsbn(book: Book) -> Optional[str]:
+    response = await httpxClient.get(book.url)
     if response.status_code == 404:
         return None
     response.raise_for_status()
@@ -55,10 +58,10 @@ def getBookIsbn(book: Book) -> Optional[str]:
     return None
 
 
-def getBooksPage(
+async def getBooksPage(
     page: int, profileId: int, bookIdToIsbn: dict[str, str]
 ) -> Optional[BooksPageResponse]:
-    response = httpx.post(
+    response = await httpxClient.post(
         "https://lubimyczytac.pl/profile/getLibraryBooksList",
         headers={
             "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
@@ -106,8 +109,6 @@ def getBooksPage(
         )
         if book.bookId in bookIdToIsbn:
             book.isbn = bookIdToIsbn[book.bookId]
-        if book.isbn is None:
-            book.isbn = getBookIsbn(book)
         books.append(book)
     return BooksPageResponse(
         books=books,
@@ -116,36 +117,44 @@ def getBooksPage(
     )
 
 
-def getBooks(profileId: int, previousResult: list[Book]) -> list[Book]:
+async def getBooks(profileId: int, previousResult: list[Book]) -> list[Book]:
     bookIdToIsbn = {
         book.bookId: book.isbn for book in previousResult if book.isbn is not None
     }
-    firstPage = getBooksPage(1, profileId, bookIdToIsbn)
+    firstPage = await getBooksPage(1, profileId, bookIdToIsbn)
     books = firstPage.books
-    for page in tqdm(range(2, firstPage.count // len(firstPage.books) + 2)):
-        pageBooks = getBooksPage(page, profileId, bookIdToIsbn)
+    for page in trange(2, firstPage.count // len(firstPage.books) + 2):
+        pageBooks = await getBooksPage(page, profileId, bookIdToIsbn)
         if pageBooks is None or len(pageBooks.books) == 0:
             break
         books.extend(pageBooks.books)
         page += 1
         if pageBooks.left <= 0:
             break
+
+    async def _addMissingIsbn(book: Book):
+        book.isbn = await getBookIsbn(book)
+
+    await tqdm.gather(*[_addMissingIsbn(book) for book in books if book.isbn is None])
     return books
 
 
-def downloadCovers(books: list[Book], coversDir: Path):
+async def downloadCovers(books: list[Book], coversDir: Path):
     coversDir.mkdir(exist_ok=True)
-    for book in tqdm(books):
+
+    async def _downloadCover(book: Book):
         coverPath = coversDir / f"{book.bookId}.jpg"
         if coverPath.exists():
-            continue
-        response = httpx.get(book.coverUrl)
+            return
+        response = await httpxClient.get(book.coverUrl)
         response.raise_for_status()
         with coverPath.open("wb") as f:
             f.write(response.content)
 
+    await tqdm.gather(*[_downloadCover(book) for book in books])
 
-def main():
+
+async def main():
     parser = argparse.ArgumentParser(
         description="Program downloads books and their covers from lubimyczytac.pl"
     )
@@ -164,10 +173,10 @@ def main():
     if outputJson.exists():
         with outputJson.open("rb") as f:
             previousResult = [Book(**book) for book in orjson.loads(f.read())]
-    booksFetched = getBooks(args.profileId, previousResult)
+    booksFetched = await getBooks(args.profileId, previousResult)
     outputJson.write_bytes(orjson.dumps(booksFetched))
-    downloadCovers(booksFetched, outputDirectory / "covers")
+    await downloadCovers(booksFetched, outputDirectory / "covers")
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
