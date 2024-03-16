@@ -174,7 +174,7 @@ async def main():
         with outputJson.open("rb") as f:
             previousResult = [Book(**book) for book in orjson.loads(f.read())]
     booksFetched = await getBooks(args.profileId, previousResult)
-    outputJson.write_bytes(orjson.dumps(booksFetched))
+    outputJson.write_bytes(orjson.dumps(booksFetched, option=orjson.OPT_INDENT_2))
     await downloadCovers(booksFetched, outputDirectory / "covers")
 
 
