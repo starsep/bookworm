@@ -104,10 +104,14 @@ def readNaKanapie(outputDirectory: Path) -> list[NaKanapieBook]:
     return result
 
 
+def saveNaKanapie(outputDirectory: Path, books: list[NaKanapieBook]):
+    outputJson = outputDirectory / "nakanapie.json"
+    outputJson.write_bytes(orjson.dumps(books, option=orjson.OPT_INDENT_2))
+
+
 async def downloadNaKanapie(
     outputDirectory: Path, username: str
 ) -> list[NaKanapieBook]:
-    outputJson = outputDirectory / "nakanapie.json"
     previousResult = readNaKanapie(outputDirectory)
     books = await getBooks(username, previousResult)
 
@@ -116,8 +120,38 @@ async def downloadNaKanapie(
 
     await tqdm.gather(*[_addMissingIsbn(book) for book in books if book.isbn is None])
 
-    outputJson.write_bytes(orjson.dumps(books, option=orjson.OPT_INDENT_2))
+    saveNaKanapie(outputDirectory, books)
     return books
+
+
+async def updateNaKanapieBookStatus(book: NaKanapieBook):
+    response = await httpxClient.put(
+        f"https://nakanapie.pl/profil/relations/{book.id}",
+        follow_redirects=True,
+        json={
+            "book_id": book.bookId,
+            "favorite": False,
+            "kind": book.kind,
+            "lists": book.lists,
+            "reading_start": None,
+            "reading_stop": None,
+            "score": None,
+        },
+    )
+    response.raise_for_status()
+
+
+async def logInToNaKanapie(userLogin, userPassword):
+    response = await httpxClient.post(
+        "https://nakanapie.pl/konto/logowanie",
+        follow_redirects=True,
+        data={
+            "user[login]": userLogin,
+            "user[password]": userPassword,
+            "commit": "Zaloguj+się",
+        },
+    )
+    response.raise_for_status()
 
 
 async def main():

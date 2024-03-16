@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+import httpx
 import orjson
 from bs4 import BeautifulSoup
 import re
@@ -67,7 +68,7 @@ async def getBooksPage(
             "own": 0,
         },
     )
-    if response.status_code == 404:
+    if response.status_code == httpx.codes.NOT_FOUND:
         return None
     response.raise_for_status()
     data = response.json()["data"]

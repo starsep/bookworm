@@ -1,5 +1,6 @@
 from typing import Optional
 
+import httpx
 from bs4 import BeautifulSoup
 from httpx import AsyncClient, Limits
 
@@ -12,7 +13,7 @@ def normalizeIsbn(isbn: str) -> str:
 
 async def getBookIsbn(url: str) -> Optional[str]:
     response = await httpxClient.get(url)
-    if response.status_code == 404:
+    if response.status_code == httpx.codes.NOT_FOUND:
         return None
     response.raise_for_status()
     soup = BeautifulSoup(response.text, "html.parser")

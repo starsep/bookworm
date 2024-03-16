@@ -21,6 +21,9 @@ from nakanapie import (
     KIND_READING,
     KIND_READ,
     KIND_WANT_TO_READ,
+    updateNaKanapieBookStatus,
+    logInToNaKanapie,
+    saveNaKanapie,
 )
 
 LUBIMYCZYTAC_TO_NAKANAPIE = {
@@ -33,25 +36,23 @@ LUBIMYCZYTAC_TO_NAKANAPIE = {
 async def syncSharedBook(
     lubimyCzytacBook: LubimyCzytacBook, naKanapieBook: NaKanapieBook
 ):
+    newKind = None
+    newLists = []
     for shelf in lubimyCzytacBook.shelves:
         if shelf in LUBIMYCZYTAC_TO_NAKANAPIE:
             naKanapieExpected = LUBIMYCZYTAC_TO_NAKANAPIE[shelf]
             if isinstance(naKanapieExpected, str):
                 if naKanapieBook.kind != naKanapieExpected:
-                    # TODO
-                    print(
-                        f"Moving {naKanapieBook.title} from {naKanapieBook.kind} to {naKanapieExpected}"
-                    )
+                    newKind = naKanapieExpected
             elif isinstance(naKanapieExpected, int):
                 if naKanapieExpected not in naKanapieBook.lists:
-                    # TODO
-                    print(
-                        f"Adding {lubimyCzytacBook.title} to {naKanapieExpected} list"
-                    )
-
+                    newLists.append(naKanapieExpected)
         else:
             print(f"Unknown LubimyCzytac shelf: {shelf}. Ignoring")
-    pass
+    if newKind is not None or len(newLists) > 0:
+        naKanapieBook.kind = newKind
+        naKanapieBook.lists.extend(newLists)
+        await updateNaKanapieBookStatus(naKanapieBook)
 
 
 async def syncSharedBooks(
@@ -73,7 +74,10 @@ async def importLubimyCzytacToNaKanapie(
     output: Path,
     forceDownload: bool,
     ownListId: Optional[int],
+    loginNaKanapie: str,
+    passwordNaKanapie: str,
 ):
+    await logInToNaKanapie(userLogin=loginNaKanapie, userPassword=passwordNaKanapie)
     if ownListId is not None:
         LUBIMYCZYTAC_TO_NAKANAPIE[SHELF_OWN] = ownListId
     lubimyCzytacBooks = readLubimyCzytac(output)
@@ -89,6 +93,7 @@ async def importLubimyCzytacToNaKanapie(
         book.isbn: book for book in naKanapieBooks if book.isbn is not None
     }
     await syncSharedBooks(lubimyCzytacIsbnToBook, naKanapieIsbnToBook)
+    saveNaKanapie(output, naKanapieBooks)
 
 
 async def main():
@@ -99,6 +104,8 @@ async def main():
         "profileIdLubimyCzytac", type=int, help="Profile id of LubimyCzytac user"
     )
     parser.add_argument("usernameNaKanapie", type=str, help="Username from NaKanapie")
+    parser.add_argument("loginNaKanapie", type=str, help="Login to NaKanapie")
+    parser.add_argument("passwordNaKanapie", type=str, help="Password to NaKanapie")
     parser.add_argument(
         "--output",
         type=Path,
@@ -124,6 +131,8 @@ async def main():
     await importLubimyCzytacToNaKanapie(
         profileIdLubimyCzytac=args.profileIdLubimyCzytac,
         usernameNaKanapie=args.usernameNaKanapie,
+        loginNaKanapie=args.loginNaKanapie,
+        passwordNaKanapie=args.passwordNaKanapie,
         output=args.output,
         forceDownload=args.forceDownload,
         ownListId=args.ownListId,
