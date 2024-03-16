@@ -162,6 +162,19 @@ async def downloadCovers(books: list[LubimyCzytacBook], coversDir: Path):
     await tqdm.gather(*[_downloadCover(book) for book in books])
 
 
+async def downloadLubimyCzytac(outputDirectory: Path, profileId: int):
+    outputJson = outputDirectory / "lubimyczytac.json"
+    previousResult: list[LubimyCzytacBook] = []
+    if outputJson.exists():
+        with outputJson.open("rb") as f:
+            previousResult = [
+                LubimyCzytacBook(**book) for book in orjson.loads(f.read())
+            ]
+    booksFetched = await getBooks(profileId, previousResult)
+    outputJson.write_bytes(orjson.dumps(booksFetched, option=orjson.OPT_INDENT_2))
+    await downloadCovers(booksFetched, outputDirectory / "covers")
+
+
 async def main():
     parser = argparse.ArgumentParser(
         description="Program downloads books and their covers from lubimyczytac.pl"
@@ -175,17 +188,7 @@ async def main():
         default=Path("."),
     )
     args = parser.parse_args()
-    outputDirectory: Path = args.output
-    outputJson = outputDirectory / "lubimyczytac.json"
-    previousResult: list[LubimyCzytacBook] = []
-    if outputJson.exists():
-        with outputJson.open("rb") as f:
-            previousResult = [
-                LubimyCzytacBook(**book) for book in orjson.loads(f.read())
-            ]
-    booksFetched = await getBooks(args.profileId, previousResult)
-    outputJson.write_bytes(orjson.dumps(booksFetched, option=orjson.OPT_INDENT_2))
-    await downloadCovers(booksFetched, outputDirectory / "covers")
+    await downloadLubimyCzytac(outputDirectory=args.output, profileId=args.profileId)
 
 
 if __name__ == "__main__":
