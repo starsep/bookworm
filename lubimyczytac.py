@@ -43,6 +43,10 @@ class BooksPageResponse:
     left: int
 
 
+def normalizeIsbn(isbn: str) -> str:
+    return isbn.replace("-", "").replace(" ", "").strip()
+
+
 async def getBookIsbn(book: Book) -> Optional[str]:
     response = await httpxClient.get(book.url)
     if response.status_code == 404:
@@ -54,7 +58,7 @@ async def getBookIsbn(book: Book) -> Optional[str]:
         isbn = isbnTag["content"]
         if isbn in ["000-00-0000-00-0"]:
             return None
-        return isbn
+        return normalizeIsbn(isbn)
     return None
 
 
@@ -119,7 +123,9 @@ async def getBooksPage(
 
 async def getBooks(profileId: int, previousResult: list[Book]) -> list[Book]:
     bookIdToIsbn = {
-        book.bookId: book.isbn for book in previousResult if book.isbn is not None
+        book.bookId: normalizeIsbn(book.isbn)
+        for book in previousResult
+        if book.isbn is not None
     }
     firstPage = await getBooksPage(1, profileId, bookIdToIsbn)
     books = firstPage.books
