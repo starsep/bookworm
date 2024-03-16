@@ -1,2 +1,3 @@
-lubimyczytac.json
+*.json
 covers
+__pycache__
