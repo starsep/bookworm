@@ -18,6 +18,11 @@ shelvesUrlPattern = re.compile(r"/biblioteczka/lista\?shelfs=(\d+)")
 
 lubimyCzytacDomain = "https://lubimyczytac.pl"
 
+SHELF_READ = "Przeczytane"
+SHELF_OWN = "Posiadam"
+SHELF_WANT_TO_READ = "Chcę przeczytać"
+SHELF_READING = "Teraz czytam"
+
 
 @dataclass
 class LubimyCzytacBook:
@@ -166,7 +171,7 @@ async def main():
     parser = argparse.ArgumentParser(
         description="Program downloads books info and their covers from lubimyczytac.pl"
     )
-    parser.add_argument("profileId", type=int, help="Profile id of user")
+    parser.add_argument("profileId", type=int, help="Profile id of LubimyCzytac user")
     parser.add_argument(
         "--output",
         type=Path,

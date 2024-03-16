@@ -12,6 +12,11 @@ from common import httpxClient, normalizeIsbn, getBookIsbn
 naKanapieDomain = "https://nakanapie.pl"
 
 
+KIND_READING = "currently_reading"
+KIND_READ = "have_read"
+KIND_WANT_TO_READ = "want_to_read"
+
+
 @dataclass
 class NaKanapieBook:
     id: int
@@ -22,6 +27,7 @@ class NaKanapieBook:
     kind: str
     url: str
     isbn: Optional[str]
+    lists: list[int]
 
 
 @dataclass
@@ -63,6 +69,7 @@ async def getBooksPage(
                 if naKanapieDomain in book["book"]["url"]
                 else naKanapieDomain + book["book"]["url"],
                 isbn=bookIdToIsbn.get(book["id"], None),
+                lists=book["lists"],
             )
             for book in data["books"]
         ],
