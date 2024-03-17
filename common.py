@@ -29,3 +29,7 @@ async def getBookIsbn(url: str) -> Optional[str]:
             return None
         return normalizeIsbn(isbn)
     return None
+
+
+def sortBooksByIsbn(books):
+    return sorted(books, key=lambda book: "" if book.isbn is None else book.isbn)

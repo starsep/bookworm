@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 import re
 
 from tqdm.asyncio import tqdm, trange
-from common import httpxClient, normalizeIsbn, getBookIsbn
+from common import httpxClient, normalizeIsbn, getBookIsbn, sortBooksByIsbn
 
 bookUrlPattern = re.compile(r"/ksiazka/(\d+)")
 authorUrlPattern = re.compile(r"/autor/(\d+)")
@@ -169,7 +169,9 @@ async def downloadLubimyCzytac(
     outputJson = outputDirectory / "lubimyczytac.json"
     previousResult = readLubimyCzytac(outputDirectory)
     booksFetched = await getBooks(profileId, previousResult)
-    outputJson.write_bytes(orjson.dumps(booksFetched, option=orjson.OPT_INDENT_2))
+    outputJson.write_bytes(
+        orjson.dumps(sortBooksByIsbn(booksFetched), option=orjson.OPT_INDENT_2)
+    )
     await downloadCovers(booksFetched, outputDirectory / "covers")
     return booksFetched
 

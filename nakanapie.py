@@ -9,7 +9,7 @@ import orjson
 from bs4 import BeautifulSoup
 from tqdm.asyncio import tqdm
 
-from common import httpxClient, normalizeIsbn, getBookIsbn
+from common import httpxClient, normalizeIsbn, getBookIsbn, sortBooksByIsbn
 
 naKanapieDomain = "https://nakanapie.pl"
 
@@ -117,7 +117,9 @@ def readNaKanapie(outputDirectory: Path) -> list[NaKanapieBook]:
 
 def saveNaKanapie(outputDirectory: Path, books: list[NaKanapieBook]):
     outputJson = outputDirectory / "nakanapie.json"
-    outputJson.write_bytes(orjson.dumps(books, option=orjson.OPT_INDENT_2))
+    outputJson.write_bytes(
+        orjson.dumps(sortBooksByIsbn(books), option=orjson.OPT_INDENT_2)
+    )
 
 
 async def downloadNaKanapie(
