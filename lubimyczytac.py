@@ -117,14 +117,20 @@ async def getBooks(
     }
     firstPage = await getBooksPage(1, profileId, bookIdToIsbn)
     books = firstPage.books
-    for page in trange(2, firstPage.count // len(firstPage.books) + 2):
+
+    async def _processPage(page: int):
         pageBooks = await getBooksPage(page, profileId, bookIdToIsbn)
         if pageBooks is None or len(pageBooks.books) == 0:
-            break
+            return
         books.extend(pageBooks.books)
         page += 1
-        if pageBooks.left <= 0:
-            break
+
+    await tqdm.gather(
+        *[
+            _processPage(page)
+            for page in trange(2, firstPage.count // len(firstPage.books) + 2)
+        ]
+    )
 
     async def _addMissingIsbn(book: LubimyCzytacBook):
         book.isbn = await getBookIsbn(book.url)
