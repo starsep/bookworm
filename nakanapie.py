@@ -89,7 +89,7 @@ async def getBooks(
     username: str, previousResult: list[NaKanapieBook]
 ) -> list[NaKanapieBook]:
     bookIdToIsbn = {
-        book.bookId: normalizeIsbn(book.isbn)
+        book.id: normalizeIsbn(book.isbn)
         for book in previousResult
         if book.isbn is not None
     }
