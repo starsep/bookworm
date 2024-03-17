@@ -24,6 +24,8 @@ from nakanapie import (
     updateNaKanapieBookStatus,
     logInToNaKanapie,
     saveNaKanapie,
+    searchNaKanapieBook,
+    addNaKanapieBook,
 )
 
 LUBIMYCZYTAC_TO_NAKANAPIE = {
@@ -33,26 +35,45 @@ LUBIMYCZYTAC_TO_NAKANAPIE = {
 }
 
 
-async def syncSharedBook(
-    lubimyCzytacBook: LubimyCzytacBook, naKanapieBook: NaKanapieBook
-):
-    newKind = None
-    newLists = []
+def findKindForBook(lubimyCzytacBook: LubimyCzytacBook) -> Optional[str]:
     for shelf in lubimyCzytacBook.shelves:
         if shelf in LUBIMYCZYTAC_TO_NAKANAPIE:
             naKanapieExpected = LUBIMYCZYTAC_TO_NAKANAPIE[shelf]
             if isinstance(naKanapieExpected, str):
-                if naKanapieBook.kind != naKanapieExpected:
-                    newKind = naKanapieExpected
-            elif isinstance(naKanapieExpected, int):
+                return naKanapieExpected
+    return None
+
+
+ignoredShelves = set()
+
+
+def bookNeedsUpdate(
+    lubimyCzytacBook: LubimyCzytacBook, naKanapieBook: NaKanapieBook
+) -> Optional[NaKanapieBook]:
+    newKind = findKindForBook(lubimyCzytacBook)
+    newLists = []
+    for shelf in lubimyCzytacBook.shelves:
+        if shelf in LUBIMYCZYTAC_TO_NAKANAPIE:
+            naKanapieExpected = LUBIMYCZYTAC_TO_NAKANAPIE[shelf]
+            if isinstance(naKanapieExpected, int):
                 if naKanapieExpected not in naKanapieBook.lists:
                     newLists.append(naKanapieExpected)
-        else:
+        elif shelf not in ignoredShelves:
+            ignoredShelves.add(shelf)
             print(f"Unknown LubimyCzytac shelf: {shelf}. Ignoring")
     if newKind is not None or len(newLists) > 0:
         naKanapieBook.kind = newKind
         naKanapieBook.lists.extend(newLists)
-        await updateNaKanapieBookStatus(naKanapieBook)
+        return naKanapieBook
+    return None
+
+
+async def syncSharedBook(
+    lubimyCzytacBook: LubimyCzytacBook, naKanapieBook: NaKanapieBook
+):
+    updateBook = bookNeedsUpdate(lubimyCzytacBook, naKanapieBook)
+    if updateBook is not None:
+        await updateNaKanapieBookStatus(updateBook)
 
 
 async def syncSharedBooks(
@@ -64,8 +85,38 @@ async def syncSharedBooks(
         *[
             syncSharedBook(lubimyCzytacIsbnToBook[isbn], naKanapieIsbnToBook[isbn])
             for isbn in sharedIsbns
-        ]
+        ],
+        desc="↔️ Syncing shared books",
     )
+
+
+async def addMissingBooks(
+    lubimyCzytacIsbnToBook: dict[str, LubimyCzytacBook],
+    naKanapieIsbnToBook: dict[str, NaKanapieBook],
+):
+    missingIsbns = set(lubimyCzytacIsbnToBook.keys()) - set(naKanapieIsbnToBook.keys())
+    isbnsNotFound = []
+
+    async def _addMissingBook(isbn: str):
+        searchResult = await searchNaKanapieBook(isbn)
+        if searchResult is not None:
+            try:
+                await addNaKanapieBook(
+                    bookId=searchResult.bookId,
+                    bundleId=searchResult.bundleId,
+                    kind=findKindForBook(lubimyCzytacIsbnToBook[isbn]),
+                )
+            except Exception as e:
+                print(f"Failed to add book with isbn {isbn}: {e}")
+        else:
+            isbnsNotFound.append(isbn)
+
+    await tqdm.gather(
+        *[_addMissingBook(isbn) for isbn in missingIsbns],
+        desc="🛋️ NaKanapie: Adding missing books",
+    )
+
+    print(f"Books not found on NaKanapie: {isbnsNotFound}")
 
 
 async def importLubimyCzytacToNaKanapie(
@@ -93,7 +144,9 @@ async def importLubimyCzytacToNaKanapie(
         book.isbn: book for book in naKanapieBooks if book.isbn is not None
     }
     await syncSharedBooks(lubimyCzytacIsbnToBook, naKanapieIsbnToBook)
+    await addMissingBooks(lubimyCzytacIsbnToBook, naKanapieIsbnToBook)
     saveNaKanapie(output, naKanapieBooks)
+    await downloadNaKanapie(output, usernameNaKanapie)
 
 
 async def main():

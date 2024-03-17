@@ -6,7 +6,8 @@ pre-commit:
       run: ruff format .
       stage_fixed: true
     lint:
-      run: ruff check .
+      run: ruff check --fix .
+      stage_fixed: true
 
 skip_output:
   - meta           # Skips lefthook version printing

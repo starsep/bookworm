@@ -129,7 +129,10 @@ async def getBooks(
     async def _addMissingIsbn(book: LubimyCzytacBook):
         book.isbn = await getBookIsbn(book.url)
 
-    await tqdm.gather(*[_addMissingIsbn(book) for book in books if book.isbn is None])
+    await tqdm.gather(
+        *[_addMissingIsbn(book) for book in books if book.isbn is None],
+        desc="📖 LubimyCzytac: Adding missing ISBNs",
+    )
     return books
 
 
@@ -145,7 +148,10 @@ async def downloadCovers(books: list[LubimyCzytacBook], coversDir: Path):
         with coverPath.open("wb") as f:
             f.write(response.content)
 
-    await tqdm.gather(*[_downloadCover(book) for book in books])
+    await tqdm.gather(
+        *[_downloadCover(book) for book in books],
+        desc="📖 LubimyCzytac: Downloading covers",
+    )
 
 
 def readLubimyCzytac(outputDirectory: Path) -> list[LubimyCzytacBook]:

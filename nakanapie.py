@@ -1,10 +1,12 @@
 import argparse
 import asyncio
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
 import orjson
+from bs4 import BeautifulSoup
 from tqdm.asyncio import tqdm
 
 from common import httpxClient, normalizeIsbn, getBookIsbn
@@ -15,6 +17,11 @@ naKanapieDomain = "https://nakanapie.pl"
 KIND_READING = "currently_reading"
 KIND_READ = "have_read"
 KIND_WANT_TO_READ = "want_to_read"
+
+bundlePattern = re.compile(r"bundle_(\d+)")
+bookLinkPattern = re.compile(r"/ksiazka/.*\?.*")
+bookIdPattern = re.compile(r"/ksiazka/.*-(\d{6,})\?")
+reviewBookIdPattern = re.compile(r"/dodaj\?ksiazka=(\d{6,})\"")
 
 
 @dataclass
@@ -89,7 +96,11 @@ async def getBooks(
     firstPage = await getBooksPage(username, 1, bookIdToIsbn)
     books = firstPage.books
     for booksPage in await tqdm.gather(
-        *[getBooksPage(username, page) for page in range(2, firstPage.pages + 1)]
+        *[
+            getBooksPage(username, page, bookIdToIsbn)
+            for page in range(2, firstPage.pages + 1)
+        ],
+        desc="🛋️ NaKanapie: Downloading books",
     ):
         books.extend(booksPage.books)
     return books
@@ -118,10 +129,25 @@ async def downloadNaKanapie(
     async def _addMissingIsbn(book: NaKanapieBook):
         book.isbn = await getBookIsbn(book.url)
 
-    await tqdm.gather(*[_addMissingIsbn(book) for book in books if book.isbn is None])
+    await tqdm.gather(
+        *[_addMissingIsbn(book) for book in books if book.isbn is None],
+        desc="🛋️ NaKanapie: Adding missing ISBNs",
+    )
 
     saveNaKanapie(outputDirectory, books)
     return books
+
+
+async def addNaKanapieBook(bookId: int, bundleId: int, kind: str):
+    response = await httpxClient.post(
+        "https://nakanapie.pl/api/v1/book/status",
+        json={
+            "book": bookId,
+            "bundle": bundleId,
+            "kind": kind,
+        },
+    )
+    response.raise_for_status()
 
 
 async def updateNaKanapieBookStatus(book: NaKanapieBook):
@@ -139,6 +165,43 @@ async def updateNaKanapieBookStatus(book: NaKanapieBook):
         },
     )
     response.raise_for_status()
+
+
+@dataclass
+class SearchResult:
+    bundleId: int
+    bookId: int
+
+
+async def searchNaKanapieBook(isbn: str) -> Optional[SearchResult]:
+    response = await httpxClient.get(f"https://nakanapie.pl/search/instant?q={isbn}")
+    response.raise_for_status()
+    if "Nie znaleziono żadnych wyników" in response.text:
+        return None
+    soup = BeautifulSoup(response.text, "html.parser")
+    bookLink = soup.find("a", {"href": bookLinkPattern})
+    if bookLink is None:
+        return None
+    bookUrl = bookLink["href"]
+    searchBookId = bookIdPattern.search(bookUrl)
+    bookId = None
+    if searchBookId is None:
+        bookResponse = await httpxClient.get(naKanapieDomain + bookUrl)
+        reviewBookId = reviewBookIdPattern.search(bookResponse.text)
+        if reviewBookId is not None:
+            bookId = int(reviewBookId.group(1))
+    else:
+        bookId = int(bookIdPattern.search(bookUrl).group(1))
+    if bookId is None:
+        return None
+    bundleIdLink = soup.find("div", {"id": bundlePattern})
+    if bundleIdLink is None:
+        return None
+    bundleId = int(bundlePattern.search(bundleIdLink["id"]).group(1))
+    return SearchResult(
+        bundleId=bundleId,
+        bookId=bookId,
+    )
 
 
 async def logInToNaKanapie(userLogin, userPassword):
