@@ -9,7 +9,7 @@ import orjson
 from bs4 import BeautifulSoup
 import re
 
-from tqdm.asyncio import tqdm, trange
+from tqdm.asyncio import tqdm
 from common import httpxClient, normalizeIsbn, getBookIsbn, sortBooksByIsbn
 
 bookUrlPattern = re.compile(r"/ksiazka/(\d+)")
@@ -128,8 +128,9 @@ async def getBooks(
     await tqdm.gather(
         *[
             _processPage(page)
-            for page in trange(2, firstPage.count // len(firstPage.books) + 2)
-        ]
+            for page in range(2, firstPage.count // len(firstPage.books) + 2)
+        ],
+        desc="📖 LubimyCzytac: Downloading books",
     )
 
     async def _addMissingIsbn(book: LubimyCzytacBook):
