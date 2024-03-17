@@ -90,6 +90,21 @@ async def syncSharedBooks(
     )
 
 
+async def addMissingBook(isbn: str, kind: str, isbnsNotFound: list[str]):
+    searchResult = await searchNaKanapieBook(isbn)
+    if searchResult is not None:
+        try:
+            await addNaKanapieBook(
+                bookId=searchResult.bookId,
+                bundleId=searchResult.bundleId,
+                kind=kind,
+            )
+        except Exception as e:
+            print(f"Failed to add book with isbn {isbn}: {e}")
+    else:
+        isbnsNotFound.append(isbn)
+
+
 async def addMissingBooks(
     lubimyCzytacIsbnToBook: dict[str, LubimyCzytacBook],
     naKanapieIsbnToBook: dict[str, NaKanapieBook],
@@ -97,22 +112,13 @@ async def addMissingBooks(
     missingIsbns = set(lubimyCzytacIsbnToBook.keys()) - set(naKanapieIsbnToBook.keys())
     isbnsNotFound = []
 
-    async def _addMissingBook(isbn: str):
-        searchResult = await searchNaKanapieBook(isbn)
-        if searchResult is not None:
-            try:
-                await addNaKanapieBook(
-                    bookId=searchResult.bookId,
-                    bundleId=searchResult.bundleId,
-                    kind=findKindForBook(lubimyCzytacIsbnToBook[isbn]),
-                )
-            except Exception as e:
-                print(f"Failed to add book with isbn {isbn}: {e}")
-        else:
-            isbnsNotFound.append(isbn)
-
     await tqdm.gather(
-        *[_addMissingBook(isbn) for isbn in missingIsbns],
+        *[
+            addMissingBook(
+                isbn, findKindForBook(lubimyCzytacIsbnToBook[isbn]), isbnsNotFound
+            )
+            for isbn in missingIsbns
+        ],
         desc="🛋️ NaKanapie: Adding missing books",
     )
 
