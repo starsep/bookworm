@@ -2,11 +2,8 @@
 pre-commit:
   parallel: true
   commands:
-    format:
-      run: ruff format .
-      stage_fixed: true
     lint:
-      run: ruff check --fix .
+      run: uv run ruff format . && uv run ruff check --fix .
       stage_fixed: true
 
 skip_output:
